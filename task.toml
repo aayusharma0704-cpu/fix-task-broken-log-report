@@ -1,26 +1,26 @@
-artifacts = "/app/report.json"
+artifacts = ["/app/process_log.py", "/app/report.json"]
 
 [task]
 name = "dynamo/log-report"
-description = "Parse an Apache-style access log into a small JSON summary report."
+description = "Write a robust parser for a multi-feed web access log that emits a per-UTC-day traffic report."
 
 [metadata]
 category = "data_processing_and_etl"
 subcategory = "text_processing"
 task_objective = ["transform", "generate"]
-artifact_type = ["text_or_log_file", "generated_output_artifact"]
-expert_time_estimate_hours = 0.3
+artifact_type = ["single_script_or_program", "generated_output_artifact"]
+expert_time_estimate_hours = 1.0
 model_tested = "GPT-5.4"
 agent_tested = "Terminus-2"
-difficulty_explanation = "Parse a small access log and emit summary stats."
-solution_explanation = "Read the log, count requests/unique IPs, find the top path."
-verification_explanation = "Check the report file."
+difficulty_explanation = "The log is stitched from several feeds that serialize the same field differently. A report that looks correct on the shipped sample is silently wrong on other exports unless the solver discovers and normalizes the divergent encodings before aggregating: client hosts appear as bare IPv4, IPv4-mapped IPv6, and host:port forms for the same machine; timestamps carry real non-UTC offsets that move a request onto a different UTC day; and byte sizes are sometimes written with digit-group separators. In the shipped sample these encodings occur only on excluded health-check lines, so a naive parser matches the sample yet diverges on held-out logs where they land on counted lines."
+solution_explanation = "Parse each entry; fold the mapped-IPv6 and host:port client forms to the bare host; convert each local timestamp to UTC using its own numeric offset before taking the calendar day; strip digit-group separators from the byte size; exclude /healthz; and collapse duplicate entries recorded by more than one feed. Then aggregate request count, distinct client count, and total bytes per UTC day."
+verification_explanation = "The solver's /app/process_log.py is re-run at verify time against the shipped sample and 12 freshly generated held-out logs. Each /app/report.json is compared for exact equality against an independent ground truth that the generator computes from each request's structured truth (canonical client, true UTC instant, true byte size) before serialization, so it shares no decode path with the solution. Reward is 1 only if every report matches exactly."
 
 [verifier]
-timeout_sec = 120.0
+timeout_sec = 300.0
 
 [agent]
-timeout_sec = 120.0
+timeout_sec = 3600.0
 
 [environment]
 build_timeout_sec = 600.0
@@ -28,5 +28,5 @@ cpus = 1
 memory_mb = 2048
 storage_mb = 10240
 gpus = 0
-allow_internet = true
+allow_internet = false
 mcp_servers = []
